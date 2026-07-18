@@ -1,3 +1,0 @@
-# Executive Summary
-
-Echo is a local-first AI companion inspired by Halo's Cortana...

@@ -1,3 +1,0 @@
-# Product Vision
-
-Mission: Build a persistent voice-first AI companion...
