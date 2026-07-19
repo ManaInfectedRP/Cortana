@@ -10,6 +10,7 @@ Usage:
 import argparse
 import asyncio
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -75,6 +76,7 @@ async def text_loop(convo: ConversationManager):
 
 async def voice_loop(convo: ConversationManager, settings: dict,
                      push_to_talk: bool, set_state):
+    from ui import avatar_bridge
     from voice.audio import record_utterance, select_input_device
     from voice.tts import create_tts
     from voice.whisper import SpeechRecognizer
@@ -152,6 +154,7 @@ async def voice_loop(convo: ConversationManager, settings: dict,
 
         reply = await convo.ask(user_text)
         print(f"Cortana: {reply}")
+        avatar_bridge.set_emotion(convo.emotion.expression())
 
         set_state("speaking")
         try:
@@ -163,13 +166,53 @@ async def voice_loop(convo: ConversationManager, settings: dict,
             print(f"[say '{listener.model_name}' again for the next question]")
 
 
+def _avatar_will_launch(settings: dict) -> bool:
+    """True if run_assistant will actually spawn the Unity avatar process -
+    used to decide whether the orb should also show (avoid two competing
+    visual presences at once, but keep the orb as an automatic fallback if
+    the avatar is disabled or hasn't been built yet)."""
+    avatar_cfg = settings.get("avatar", {})
+    if not avatar_cfg.get("enabled", True):
+        return False
+    exe_path = avatar_cfg.get("exe_path")
+    return bool(exe_path and Path(exe_path).exists())
+
+
 async def run_assistant(args, settings: dict, set_state=lambda s: None):
     convo = build_conversation(settings)
     if settings.get("tools", {}).get("enabled", True):
         from tools.alarms import start_alarm_watcher
 
         start_alarm_watcher(SHUTDOWN)
+
+    avatar_process = None
+    avatar_enabled = settings.get("avatar", {}).get("enabled", True) and not args.text
+    if avatar_enabled:
+        from ui import avatar_bridge
+
+        avatar_bridge.start(settings.get("avatar", {}).get("port", 8765))
+        _orb_set_state = set_state
+
+        def set_state(state: str) -> None:  # noqa: F811 - intentional shadow
+            _orb_set_state(state)
+            avatar_bridge.set_state(state)
+
+    # Claude connection first - it's the core dependency. Launching Unity's
+    # heavy startup (D3D11 init, shader compile, asset load) at the same
+    # moment as this handshake caused the SDK's "initialize" control request
+    # to occasionally time out under simultaneous CPU/disk contention.
     await convo.start()
+
+    if avatar_enabled:
+        if _avatar_will_launch(settings):
+            exe_path = settings["avatar"]["exe_path"]
+            avatar_process = subprocess.Popen([exe_path])
+            print(f"[avatar] launched {Path(exe_path).name}")
+        elif settings.get("avatar", {}).get("exe_path"):
+            print("[avatar] exe_path set but not found at "
+                  f"{settings['avatar']['exe_path']} - build it in Unity "
+                  "first (File > Build Settings > Build), or clear "
+                  "avatar.exe_path in settings.yaml")
     try:
         if args.text:
             await text_loop(convo)
@@ -180,6 +223,8 @@ async def run_assistant(args, settings: dict, set_state=lambda s: None):
         pass
     finally:
         SHUTDOWN.set()  # unblock any audio threads so the process can exit
+        if avatar_process is not None:
+            avatar_process.terminate()
         try:
             await asyncio.wait_for(convo.stop(), timeout=5)
         except Exception:
@@ -197,6 +242,7 @@ def main():
     ui_enabled = (
         settings.get("ui", {}).get("enabled", True)
         and not args.no_ui and not args.text
+        and not _avatar_will_launch(settings)  # avoid orb + avatar both showing
     )
 
     try:
@@ -208,7 +254,8 @@ def main():
                 ui_enabled = False
             else:
                 run_with_orb(
-                    lambda set_state: run_assistant(args, settings, set_state)
+                    lambda set_state: run_assistant(args, settings, set_state),
+                    shutdown_event=SHUTDOWN,
                 )
         if not ui_enabled:
             asyncio.run(run_assistant(args, settings))

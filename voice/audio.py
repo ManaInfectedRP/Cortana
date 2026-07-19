@@ -1,6 +1,7 @@
 """Microphone capture with energy-based end-of-speech detection, plus playback."""
 
 import queue
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -145,6 +146,35 @@ def record_utterance(
 
 def play(audio: np.ndarray, sample_rate: int) -> None:
     sd.play(audio, sample_rate)
+    sd.wait()
+
+
+def play_with_amplitude(
+    audio: np.ndarray,
+    sample_rate: int,
+    on_amplitude=None,
+    chunk_seconds: float = 1 / 30,
+) -> None:
+    """Like play(), but also calls on_amplitude(value) ~30x/sec in sync with
+    playback - value is a 0-1 loudness estimate for driving lip-sync (a
+    volume envelope, not real visemes, but good enough for open/close sync).
+    """
+    sd.play(audio, sample_rate)
+
+    if on_amplitude is not None and len(audio) > 0:
+        chunk_len = max(1, int(sample_rate * chunk_seconds))
+        gain = 5.0
+        start = time.monotonic()
+        for i in range(0, len(audio), chunk_len):
+            chunk = audio[i:i + chunk_len]
+            rms = float(np.sqrt(np.mean(np.square(chunk)))) if len(chunk) else 0.0
+            on_amplitude(min(1.0, rms * gain))
+            target_t = start + (i + chunk_len) / sample_rate
+            sleep_for = target_t - time.monotonic()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+        on_amplitude(0.0)
+
     sd.wait()
 
 

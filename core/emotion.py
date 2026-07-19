@@ -29,6 +29,17 @@ CUES = {
 DECAY = 0.6
 THRESHOLD = 0.8
 
+# Facial expression to show on the avatar while a mood is active - see
+# ui/avatar_bridge.py's "emotion" field and Unity's FacialExpression.cs.
+# Names must match the VRM10 expression presets (happy/angry/sad/relaxed/
+# surprised/neutral).
+EXPRESSIONS = {
+    "frustration": "relaxed",   # calming, reassuring - not mirroring the user
+    "stress": "relaxed",
+    "urgency": "neutral",       # focused, no extra warmth to slow things down
+    "excitement": "happy",
+}
+
 
 class EmotionTracker:
     def __init__(self):
@@ -63,3 +74,13 @@ class EmotionTracker:
             "stress": "user seems stressed - be calm, warm and reassuring",
         }
         return "; ".join(hints[m] for m in active)
+
+    def expression(self) -> str | None:
+        """Avatar facial-expression hint, or None to use the current state's
+        default (see Unity's FacialExpression.cs). Picks whichever active
+        mood is strongest so only one expression shows at a time."""
+        active = [(m, v) for m, v in self.state.items() if v >= THRESHOLD]
+        if not active:
+            return None
+        dominant = max(active, key=lambda kv: kv[1])[0]
+        return EXPRESSIONS.get(dominant)

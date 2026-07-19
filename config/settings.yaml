@@ -33,6 +33,14 @@ plugins:
 ui:
   enabled: true       # floating orb, bottom right (voice modes only)
 
+avatar:
+  enabled: true       # WebSocket bridge for a Unity/Unreal/Godot avatar app
+  port: 8765          # no-op if nothing connects; see AVATAR_3D.md
+  # Path to the exported Unity avatar app. If set and the file exists,
+  # Cortana launches it automatically at startup and closes it on exit.
+  # Leave null to run the avatar app yourself (or not use one at all).
+  exe_path: E:\Cortana\Cortana\Builds\CortanaAvatar\Cortana.exe
+
 memory:
   dir: data/memory
   top_k: 4            # relevant memories injected per turn

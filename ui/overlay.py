@@ -127,10 +127,14 @@ class CortanaOrb(QWidget):
         menu.exec(e.globalPos())
 
 
-def run_with_orb(async_entry):
+def run_with_orb(async_entry, shutdown_event=None):
     """Run the Qt orb on the main thread and the assistant loop in a worker.
 
     async_entry: callable(set_state: Callable[[str], None]) -> coroutine
+    shutdown_event: threading.Event shared with the assistant loop - set on
+        Ctrl+C so the worker thread's blocking audio calls unwind and its
+        own cleanup (e.g. terminating a launched avatar process) actually
+        runs, instead of the process exiting out from under it.
     """
     import asyncio
     import signal
@@ -141,9 +145,22 @@ def run_with_orb(async_entry):
     orb = CortanaOrb(bridge)
     orb.show()
 
+    # stop the ~30fps repaint timer before Qt tears down the window on quit -
+    # otherwise a queued timeout can fire after the native window handle is
+    # gone, producing a harmless but noisy "QBackingStore::flush() ... does
+    # not have a handle" warning
+    app.aboutToQuit.connect(orb._timer.stop)
+
+    def handle_sigint(*_):
+        # setting this first is what lets the worker thread's finally block
+        # (avatar process cleanup, etc.) actually run before we quit Qt
+        if shutdown_event is not None:
+            shutdown_event.set()
+        app.quit()
+
     # let Ctrl+C in the terminal quit the Qt loop: install a handler and keep
     # a timer running so the Python interpreter gets a chance to deliver it
-    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    signal.signal(signal.SIGINT, handle_sigint)
     sigint_timer = QTimer()
     sigint_timer.timeout.connect(lambda: None)
     sigint_timer.start(200)
@@ -160,3 +177,8 @@ def run_with_orb(async_entry):
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
     app.exec()
+
+    # give the worker thread's own cleanup (SHUTDOWN-gated) a bounded chance
+    # to finish - e.g. terminating a launched avatar process - before the
+    # caller's process-exit logic runs and the daemon thread gets cut off
+    thread.join(timeout=8)

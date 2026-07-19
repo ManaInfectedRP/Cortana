@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from voice.audio import play
+from voice.audio import play, play_with_amplitude
 
 XTTS_SAMPLE_RATE = 24000
 
@@ -91,7 +91,12 @@ class XTTSEngine:
                 )
             wav = np.asarray(wav, dtype=np.float32)
             wav = wav[: XTTS_SAMPLE_RATE * self.MAX_SENTENCE_SECONDS]
-            play(wav, XTTS_SAMPLE_RATE)
+
+            try:
+                from ui.avatar_bridge import send_mouth_amplitude
+                play_with_amplitude(wav, XTTS_SAMPLE_RATE, send_mouth_amplitude)
+            except Exception:
+                play(wav, XTTS_SAMPLE_RATE)
 
 
 class SAPIEngine:
