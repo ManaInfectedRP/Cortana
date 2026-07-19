@@ -1,0 +1,5 @@
+name: weather
+description: Current weather and forecasts via Open-Meteo (free, no API key).
+enabled: true
+permissions:
+  - network

@@ -1,0 +1,30 @@
+# Core
+claude-agent-sdk>=0.1.0        # Claude reasoning via Claude Code subscription auth
+PyYAML>=6.0
+numpy>=1.26
+
+# Voice pipeline
+faster-whisper>=1.1.0          # local STT (CUDA)
+openwakeword>=0.6.0            # wake word ("hey jarvis" placeholder for "Cortana")
+pvporcupine>=3.0               # optional: custom "Hey Cortana" wake word (.ppn + PICOVOICE_ACCESS_KEY)
+sounddevice>=0.5.0             # mic capture + playback
+onnxruntime>=1.20.0            # openwakeword backend on Windows
+
+# TTS
+coqui-tts[codec]>=0.25.0       # XTTS v2 (maintained idiap fork); codec extra = torchcodec for torch>=2.9 audio IO
+transformers>=4.57,<5          # transformers 5.x removed isin_mps_friendly, breaking coqui-tts
+pyttsx3>=2.98                  # Windows SAPI fallback if XTTS unavailable
+# NOTE: torch + torchaudio are installed separately with CUDA support:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+
+# Memory
+chromadb>=0.5.0                # long-term vector memory (built-in ONNX embeddings)
+
+# Tools (Phase 2) + screen awareness (Phase 4)
+psutil>=6.0                    # system stats, processes
+plyer>=2.1                     # desktop notifications
+pillow>=10.0                   # screenshots for screen awareness / vision
+requests>=2.31                 # plugins (weather)
+
+# Desktop presence (Phase 3)
+PySide6==6.8.3                 # floating orb overlay (6.11+ DLL-conflicts with this system's MSVC runtime)

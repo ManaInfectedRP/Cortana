@@ -1,0 +1,50 @@
+# ECHO / Cortana runtime settings
+
+wake_word:
+  engine: openwakeword
+  model: models/hey_cortana.onnx
+  threshold: 0.5
+
+stt:
+  # GTX 1650 (4 GB): "small" is the sweet spot. "medium" fits but is slower.
+  model: small
+  device: auto        # auto | cuda | cpu
+  language: en
+
+tts:
+  engine: xtts        # xtts | sapi
+  device: auto        # auto | cuda | cpu  (XTTS on 4 GB GPU is tight; auto tries cuda then cpu)
+  speaker: "Ana Florence"   # one of the XTTS v2 built-in speakers
+  language: en
+
+claude:
+  model: null         # null = Claude Code default model on your subscription
+  max_turns: 12
+  # Claude Code built-in tools Cortana may use (read-only + web research)
+  builtin_tools: [WebSearch, WebFetch, Read, Glob, Grep]
+
+tools:
+  enabled: true       # custom tool system (desktop, filesystem, browser, system, screen)
+  allow_bash: false   # give Cortana a full terminal (powerful; off by default)
+
+plugins:
+  enabled: true       # load plugins/*/ (weather ships as an example)
+
+ui:
+  enabled: true       # floating orb, bottom right (voice modes only)
+
+memory:
+  dir: data/memory
+  top_k: 4            # relevant memories injected per turn
+
+audio:
+  # Pin the microphone by name substring (case-insensitive) so virtual mics
+  # (DroidCam, Voicemod, ...) can't hijack it. null = Windows default.
+  input_device: Arozzi
+  sample_rate: 16000
+  max_utterance_s: 20
+  silence_s: 1.2      # end-of-speech silence
+  # Manual speech-detection threshold. null = auto (1.8x measured noise floor).
+  # If you keep seeing "[audio] no speech", set this below the printed
+  # "loudest heard" value, e.g. 400.
+  threshold: null
