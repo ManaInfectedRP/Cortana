@@ -14,7 +14,7 @@ class Personality:
     def name(self) -> str:
         return self._data.get("name", "Cortana")
 
-    def system_prompt(self) -> str:
+    def system_prompt(self, rapport_hint: str | None = None) -> str:
         d = self._data
         lines = [
             f"You are {self.name}, a persistent AI voice companion running on the user's PC.",
@@ -30,4 +30,10 @@ class Personality:
             lines.append("")
             lines.append("Rules:")
             lines.extend(f"- {r}" for r in rules)
+        if rapport_hint:
+            # From core/rapport.py - a slow, cross-session read on how
+            # things have been trending, not just this conversation's mood.
+            lines.append("")
+            lines.append("Long-term rapport with this user:")
+            lines.append(rapport_hint)
         return "\n".join(lines)

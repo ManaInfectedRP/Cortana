@@ -23,6 +23,11 @@ claude:
   # Claude Code built-in tools Cortana may use (read-only + web research)
   builtin_tools: [WebSearch, WebFetch, Read, Glob, Grep]
 
+emotion:
+  enabled: true       # local classifier reading the USER's mood - see core/emotion.py
+  device: cpu         # cpu | cuda - cpu avoids competing with Whisper/XTTS for the
+                       # 4GB GPU budget. First run downloads a ~330MB model.
+
 tools:
   enabled: true       # custom tool system (desktop, filesystem, browser, system, screen)
   allow_bash: false   # give Cortana a full terminal (powerful; off by default)

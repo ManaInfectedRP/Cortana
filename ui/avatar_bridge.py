@@ -10,6 +10,10 @@ Wire protocol - one JSON object per message:
         # the current state's default expression (see FacialExpression.cs -
         # empty string rather than JSON null, since Unity's JsonUtility
         # doesn't reliably round-trip null for string fields)
+    {"reaction": "gratitude"}
+        # one-shot avatar voice reaction - see core/emotion.py's REACTIONS
+        # and Unity's AvatarSfx.cs/CortanaAnimatorDriver.TriggerReaction().
+        # Fires once per detection, not repeated while the mood is active.
 
 Runs as a local-only server (ws://localhost:8765 by default). If no avatar
 app is connected, broadcasts are cheap no-ops - Cortana works identically
@@ -99,6 +103,14 @@ def set_emotion(name: str | None) -> None:
     if _loop is None:
         return
     asyncio.run_coroutine_threadsafe(_broadcast({"emotion": name or ""}), _loop)
+
+
+def trigger_reaction(name: str) -> None:
+    """Push a one-shot avatar voice reaction (e.g. "gratitude") to any
+    connected avatar app. See core/emotion.py's REACTIONS."""
+    if _loop is None:
+        return
+    asyncio.run_coroutine_threadsafe(_broadcast({"reaction": name}), _loop)
 
 
 def send_mouth_amplitude(amplitude: float) -> None:

@@ -12,7 +12,8 @@ onnxruntime>=1.20.0            # openwakeword backend on Windows
 
 # TTS
 coqui-tts[codec]>=0.25.0       # XTTS v2 (maintained idiap fork); codec extra = torchcodec for torch>=2.9 audio IO
-transformers>=4.57,<5          # transformers 5.x removed isin_mps_friendly, breaking coqui-tts
+transformers>=4.57,<5          # transformers 5.x removed isin_mps_friendly, breaking coqui-tts;
+                                # also runs core/emotion.py's local mood classifier (CPU by default)
 pyttsx3>=2.98                  # Windows SAPI fallback if XTTS unavailable
 # NOTE: torch + torchaudio are installed separately with CUDA support:
 #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu126

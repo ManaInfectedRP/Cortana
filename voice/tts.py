@@ -75,23 +75,25 @@ class XTTSEngine:
     # hard cap per sentence — guards against XTTS's runaway-generation bug
     MAX_SENTENCE_SECONDS = 30
 
+    def synthesize(self, text: str) -> np.ndarray:
+        """Render one sentence to a float32 waveform - no playback. Shared by
+        speak() and scripts/generate_avatar_sfx.py so both use the exact same
+        voice/safety-cap path."""
+        # unpunctuated text is the classic trigger for endless generation
+        if text[-1] not in ".!?…":
+            text += "."
+        if self.speaker_wav:
+            wav = self.tts.tts(
+                text=text, speaker_wav=self.speaker_wav, language=self.language,
+            )
+        else:
+            wav = self.tts.tts(text=text, speaker=self.speaker, language=self.language)
+        wav = np.asarray(wav, dtype=np.float32)
+        return wav[: XTTS_SAMPLE_RATE * self.MAX_SENTENCE_SECONDS]
+
     def speak(self, text: str) -> None:
         for sentence in split_sentences(text):
-            # unpunctuated text is the classic trigger for endless generation
-            if sentence[-1] not in ".!?…":
-                sentence += "."
-            if self.speaker_wav:
-                wav = self.tts.tts(
-                    text=sentence, speaker_wav=self.speaker_wav,
-                    language=self.language,
-                )
-            else:
-                wav = self.tts.tts(
-                    text=sentence, speaker=self.speaker, language=self.language
-                )
-            wav = np.asarray(wav, dtype=np.float32)
-            wav = wav[: XTTS_SAMPLE_RATE * self.MAX_SENTENCE_SECONDS]
-
+            wav = self.synthesize(sentence)
             try:
                 from ui.avatar_bridge import send_mouth_amplitude
                 play_with_amplitude(wav, XTTS_SAMPLE_RATE, send_mouth_amplitude)

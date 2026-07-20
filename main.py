@@ -51,12 +51,16 @@ def build_conversation(settings: dict) -> ConversationManager:
     if settings.get("tools", {}).get("allow_bash", False):
         builtin.append("Bash")
 
+    emotion_cfg = settings.get("emotion", {})
+
     return ConversationManager(
         personality, memory,
         model=settings["claude"]["model"],
         max_turns=settings["claude"]["max_turns"],
         tool_manager=tool_manager,
         builtin_tools=builtin,
+        emotion_enabled=emotion_cfg.get("enabled", True),
+        emotion_device=emotion_cfg.get("device", "cpu"),
     )
 
 
@@ -77,6 +81,7 @@ async def text_loop(convo: ConversationManager):
 async def voice_loop(convo: ConversationManager, settings: dict,
                      push_to_talk: bool, set_state):
     from ui import avatar_bridge
+    from voice import greetings
     from voice.audio import record_utterance, select_input_device
     from voice.tts import create_tts
     from voice.whisper import SpeechRecognizer
@@ -116,54 +121,69 @@ async def voice_loop(convo: ConversationManager, settings: dict,
         print(f"[init] wake word: '{listener.model_name}'")
 
     print("\nCortana is online.")
-    while True:
-        set_state("idle")
-        if listener:
-            print(f"[listening for wake word: '{listener.model_name}']")
-            woke = await asyncio.to_thread(
-                listener.wait_for_wake, audio_cfg["sample_rate"], SHUTDOWN
+    set_state("speaking")
+    if await asyncio.to_thread(greetings.play_startup):
+        print("[greeting] played startup line")
+
+    try:
+        while True:
+            set_state("idle")
+            if listener:
+                print(f"[listening for wake word: '{listener.model_name}']")
+                woke = await asyncio.to_thread(
+                    listener.wait_for_wake, audio_cfg["sample_rate"], SHUTDOWN
+                )
+                if not woke:
+                    return
+                print("[wake word detected — speak now]")
+            else:
+                await asyncio.to_thread(input, "\n[press Enter, then speak]")
+
+            set_state("listening")
+            audio = await asyncio.to_thread(
+                lambda: record_utterance(
+                    sample_rate=audio_cfg["sample_rate"],
+                    max_seconds=audio_cfg["max_utterance_s"],
+                    silence_seconds=audio_cfg["silence_s"],
+                    stop_event=SHUTDOWN,
+                    threshold_override=audio_cfg.get("threshold"),
+                )
             )
-            if not woke:
+            if SHUTDOWN.is_set():
                 return
-            print("[wake word detected — speak now]")
-        else:
-            await asyncio.to_thread(input, "\n[press Enter, then speak]")
+            if audio is None:
+                print("[no speech detected]")
+                continue
 
-        set_state("listening")
-        audio = await asyncio.to_thread(
-            lambda: record_utterance(
-                sample_rate=audio_cfg["sample_rate"],
-                max_seconds=audio_cfg["max_utterance_s"],
-                silence_seconds=audio_cfg["silence_s"],
-                stop_event=SHUTDOWN,
-                threshold_override=audio_cfg.get("threshold"),
-            )
-        )
-        if SHUTDOWN.is_set():
-            return
-        if audio is None:
-            print("[no speech detected]")
-            continue
+            set_state("thinking")
+            user_text = await asyncio.to_thread(stt.transcribe, audio)
+            if not user_text:
+                print("[could not transcribe]")
+                continue
+            print(f"You: {user_text}")
 
-        set_state("thinking")
-        user_text = await asyncio.to_thread(stt.transcribe, audio)
-        if not user_text:
-            print("[could not transcribe]")
-            continue
-        print(f"You: {user_text}")
+            reply = await convo.ask(user_text)
+            print(f"Cortana: {reply}")
+            avatar_bridge.set_emotion(convo.emotion.expression())
+            reaction = convo.emotion.triggered_reaction()
+            if reaction:
+                avatar_bridge.trigger_reaction(reaction)
 
-        reply = await convo.ask(user_text)
-        print(f"Cortana: {reply}")
-        avatar_bridge.set_emotion(convo.emotion.expression())
-
+            set_state("speaking")
+            try:
+                await asyncio.to_thread(tts.speak, reply)
+            except Exception as e:
+                print(f"[tts] speech failed ({type(e).__name__}: {e}) - "
+                      "reply shown above in text")
+            if listener:
+                print(f"[say '{listener.model_name}' again for the next question]")
+    finally:
+        # Runs on a normal SHUTDOWN-triggered return AND on Ctrl+C (which
+        # raises through whichever await was active) - either way she gets
+        # to say goodbye.
         set_state("speaking")
-        try:
-            await asyncio.to_thread(tts.speak, reply)
-        except Exception as e:
-            print(f"[tts] speech failed ({type(e).__name__}: {e}) - "
-                  "reply shown above in text")
-        if listener:
-            print(f"[say '{listener.model_name}' again for the next question]")
+        if await asyncio.to_thread(greetings.play_shutdown):
+            print("[greeting] played shutdown line")
 
 
 def _avatar_will_launch(settings: dict) -> bool:
@@ -261,6 +281,13 @@ def main():
             asyncio.run(run_assistant(args, settings))
     except KeyboardInterrupt:
         pass
+    except Exception:
+        # Without this, any startup/runtime error (bad config, a failed
+        # model load, ...) would silently vanish - the bare os._exit(0)
+        # below runs regardless and kills the process before Python ever
+        # gets a chance to print an uncaught exception's traceback.
+        import traceback
+        traceback.print_exc()
     finally:
         SHUTDOWN.set()
         print("\nCortana signing off.")
